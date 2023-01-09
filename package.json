@@ -20,10 +20,14 @@
   "dependencies": {
     "@flashbots/ethers-provider-bundle": "^0.6.1",
     "dotenv": "^16.0.3",
-    "ethers": "^5.7.2"
+    "ethers": "^5.7.2",
+    "uuid": "^9.0.0"
   },
   "type": "commonjs",
   "compilerOptions": {
     "esModuleInterop": true
+  },
+  "devDependencies": {
+    "@types/uuid": "^9.0.0"
   }
 }

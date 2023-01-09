@@ -1,28 +1,91 @@
-import { providers, Wallet } from "ethers";
-import { FlashbotsBundleProvider } from "@flashbots/ethers-provider-bundle";
+import { ethers } from "ethers";
+import {
+  FlashbotsBundleProvider,
+  FlashbotsBundleResolution,
+} from "@flashbots/ethers-provider-bundle";
+
 require("dotenv").config();
 
 async function main() {
-  // Standard json rpc provider directly from ethers.js (NOT Flashbots)
-  const provider = new providers.JsonRpcProvider(
-    { url: process.env.GOERLI_RPC_URL! },
-    5
+  let provider = new ethers.providers.JsonRpcProvider(
+    { url: process.env.POLYGON_RPC_URL! },
+    137
   );
 
-  // `authSigner` is an Ethereum private key that does NOT store funds and is NOT your bot's primary key.
-  // This is an identifying key for signing payloads to establish reputation and whitelisting
-  // In production, this should be used across multiple bundles to build relationship. In this example, we generate a new wallet each time
-  const authSigner = Wallet.createRandom();
+  await provider.ready;
 
-  // Flashbots provider requires passing in a standard provider
-  const flashbotsProvider = await FlashbotsBundleProvider.create(
-    provider, // a normal ethers.js provider, to perform gas estimiations and nonce lookups
-    authSigner // ethers.js signer wallet, only for signing request payloads, not transactions
+  const user = new ethers.Wallet(
+    process.env.NON_COMPROMISED_PRIVATE_KEY!,
+    provider
   );
+
+  let flashbotsProvider = new FlashbotsBundleProvider(
+    provider,
+    user,
+    { url: "http://bor.txrelay.marlin.org/" },
+    137
+  );
+
+  let lastTargetBlockNumber: number;
+
+  provider.on("block", async () => {
+    const gasPrice = await provider.getGasPrice();
+
+    const txs = [
+      {
+        signer: user,
+        transaction: {
+          to: user.address,
+          gasPrice: gasPrice,
+          gasLimit: 21000,
+          chainId: 137,
+        },
+      },
+      {
+        signer: user,
+        transaction: {
+          to: user.address,
+          gasPrice: gasPrice,
+          gasLimit: 21000,
+          chainId: 137,
+        },
+      },
+    ];
+
+    const targetBlockNumber = (await provider.getBlockNumber()) + 2;
+    if (lastTargetBlockNumber === targetBlockNumber) return;
+
+    lastTargetBlockNumber = targetBlockNumber;
+
+    console.log(`Sending bundle for block number ${targetBlockNumber}`);
+
+    const bundleResponse = await flashbotsProvider.sendBundle(
+      txs,
+      targetBlockNumber
+    );
+
+    if ("error" in bundleResponse) {
+      console.log(`An error ocurred: ${bundleResponse.error.message}`);
+      return;
+    }
+
+    const bundleResolution = await bundleResponse.wait();
+    if (bundleResolution === FlashbotsBundleResolution.BundleIncluded) {
+      console.log(`Congrats, included in ${targetBlockNumber}`);
+      process.exit(0);
+    } else if (
+      bundleResolution === FlashbotsBundleResolution.BlockPassedWithoutInclusion
+    ) {
+      console.log(`Not included in ${targetBlockNumber}`);
+    } else if (
+      bundleResolution === FlashbotsBundleResolution.AccountNonceTooHigh
+    ) {
+      console.log(
+        "Nonce too high, bailing, but transaction may still be included, check etherscan later"
+      );
+      process.exit(1);
+    }
+  });
 }
 
-try {
-  main();
-} catch (error) {
-  console.log(error);
-}
+main().catch(console.error);

@@ -1,91 +1,75 @@
 import { ethers } from "ethers";
-import {
-  FlashbotsBundleProvider,
-  FlashbotsBundleResolution,
-} from "@flashbots/ethers-provider-bundle";
-
+import { FlashbotsBundleProvider } from "@flashbots/ethers-provider-bundle";
 require("dotenv").config();
 
 async function main() {
-  let provider = new ethers.providers.JsonRpcProvider(
+  // Standard json rpc provider directly from ethers.js (NOT Flashbots)
+  // create the base provider
+  let base = new ethers.providers.JsonRpcProvider(
     { url: process.env.POLYGON_RPC_URL! },
     137
   );
 
-  await provider.ready;
+  await base.ready;
 
   const user = new ethers.Wallet(
     process.env.NON_COMPROMISED_PRIVATE_KEY!,
-    provider
+    base
   );
 
-  let flashbotsProvider = new FlashbotsBundleProvider(
-    provider,
+  const hackedUser = new ethers.Wallet(
+    process.env.COMPROMISED_PRIVATE_KEY!,
+    base
+  );
+
+  let provider = new FlashbotsBundleProvider(
+    base,
     user,
     { url: "http://bor.txrelay.marlin.org/" },
     137
   );
 
-  let lastTargetBlockNumber: number;
+  const CONTRACT_ADDRESS = "0x96F1BA24294fFE0DfcD832D8376dA4a4645a4Cd6"; // Lens Proxy Contract https://polygonscan.com/address/0x96f1ba24294ffe0dfcd832d8376da4a4645a4cd6#code
 
-  provider.on("block", async () => {
-    const gasPrice = await provider.getGasPrice();
+  const ABI = [
+    {
+      inputs: [
+        { internalType: "address", name: "from", type: "address" },
+        { internalType: "address", name: "to", type: "address" },
+        { internalType: "uint256", name: "tokenId", type: "uint256" },
+      ],
+      name: "safeTransferFrom",
+      outputs: [],
+      stateMutability: "nonpayable",
+      type: "function",
+    },
+  ];
 
-    const txs = [
-      {
-        signer: user,
-        transaction: {
-          to: user.address,
-          gasPrice: gasPrice,
-          gasLimit: 21000,
-          chainId: 137,
-        },
-      },
-      {
-        signer: user,
-        transaction: {
-          to: user.address,
-          gasPrice: gasPrice,
-          gasLimit: 21000,
-          chainId: 137,
-        },
-      },
-    ];
+  const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, user);
 
-    const targetBlockNumber = (await provider.getBlockNumber()) + 2;
-    if (lastTargetBlockNumber === targetBlockNumber) return;
+  const txs = [
+    /* {
+      signer: user,
+      transaction: await contract.populateTransaction.coinbasetransfer({
+        value: ethers.utils.parseEther("0.1"),
+        gasPrice: "31000000000",
+      }),
+    }, */
+    {
+      signer: hackedUser,
+      transaction: await contract.populateTransaction.safeTransferFrom(
+        hackedUser.address,
+        user.address,
+        process.env.TOKEN_ID
+      ),
+    },
+  ];
 
-    lastTargetBlockNumber = targetBlockNumber;
+  const blk = await base.getBlockNumber();
 
-    console.log(`Sending bundle for block number ${targetBlockNumber}`);
-
-    const bundleResponse = await flashbotsProvider.sendBundle(
-      txs,
-      targetBlockNumber
-    );
-
-    if ("error" in bundleResponse) {
-      console.log(`An error ocurred: ${bundleResponse.error.message}`);
-      return;
-    }
-
-    const bundleResolution = await bundleResponse.wait();
-    if (bundleResolution === FlashbotsBundleResolution.BundleIncluded) {
-      console.log(`Congrats, included in ${targetBlockNumber}`);
-      process.exit(0);
-    } else if (
-      bundleResolution === FlashbotsBundleResolution.BlockPassedWithoutInclusion
-    ) {
-      console.log(`Not included in ${targetBlockNumber}`);
-    } else if (
-      bundleResolution === FlashbotsBundleResolution.AccountNonceTooHigh
-    ) {
-      console.log(
-        "Nonce too high, bailing, but transaction may still be included, check etherscan later"
-      );
-      process.exit(1);
-    }
-  });
+  // send bundle to marlin relay
+  /*   const result = await provider.sendBundle(txs, blk + 1);
+  console.log(result); */
 }
 
 main().catch(console.error);

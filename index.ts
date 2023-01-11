@@ -1,5 +1,9 @@
 import { ethers } from "ethers";
-import { FlashbotsBundleProvider } from "@flashbots/ethers-provider-bundle";
+import {
+  FlashbotsBundleProvider,
+  FlashbotsBundleTransaction,
+  FlashbotsBundleResolution,
+} from "@flashbots/ethers-provider-bundle";
 require("dotenv").config();
 
 async function main() {
@@ -29,7 +33,7 @@ async function main() {
     137
   );
 
-  const CONTRACT_ADDRESS = "0x96F1BA24294fFE0DfcD832D8376dA4a4645a4Cd6"; // Lens Proxy Contract https://polygonscan.com/address/0x96f1ba24294ffe0dfcd832d8376da4a4645a4cd6#code
+  const CONTRACT_ADDRESS = "0xDb46d1Dc155634FbC732f92E853b10B288AD5a1d"; // Lens Contract https://polygonscan.com/address/0xDb46d1Dc155634FbC732f92E853b10B288AD5a1d#code
 
   const ABI = [
     {
@@ -47,29 +51,68 @@ async function main() {
 
   const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, user);
 
-  const txs = [
-    /* {
-      signer: user,
-      transaction: await contract.populateTransaction.coinbasetransfer({
-        value: ethers.utils.parseEther("0.1"),
-        gasPrice: "31000000000",
-      }),
-    }, */
+  const txs: FlashbotsBundleTransaction[] = [
     {
-      signer: hackedUser,
-      transaction: await contract.populateTransaction.safeTransferFrom(
-        hackedUser.address,
-        user.address,
-        process.env.TOKEN_ID
-      ),
+      signer: user,
+      transaction: {
+        to: user.address,
+        gasPrice: ethers.utils.parseUnits("180", "gwei"),
+        gasLimit: 21000,
+        chainId: 137,
+        value: 0,
+      },
     },
+    {
+      signer: user,
+      transaction: {
+        to: user.address,
+        gasPrice: ethers.utils.parseUnits("180", "gwei"),
+        gasLimit: 21000,
+        chainId: 137,
+        value: 0,
+      },
+    },
+    /*     {
+      signer: user,
+      transaction: {
+        ...(await contract.populateTransaction.safeTransferFrom(
+          user.address,
+          user.address,
+          process.env.TOKEN_ID
+        )),
+        chainId: 137,
+        gasPrice: BigNumber.from("31000000000"),
+      },
+    }, */
   ];
 
-  const blk = await base.getBlockNumber();
-
   // send bundle to marlin relay
-  /*   const result = await provider.sendBundle(txs, blk + 1);
-  console.log(result); */
+  base.on("block", async (blk) => {
+    console.log(`Submitting bundle for block ${blk + 2}`);
+    const bundleSubmission = await provider.sendBundle(txs, blk + 2);
+
+    if ("error" in bundleSubmission) {
+      console.log(
+        `Something went wrong sending the bundle: ${bundleSubmission.error.message}`
+      );
+    } else {
+      const bundleResolution = await bundleSubmission.wait();
+      if (bundleResolution === FlashbotsBundleResolution.BundleIncluded) {
+        console.log(`${blk + 2}: Bundle included let's goooo`);
+        process.exit(0);
+      } else if (
+        bundleResolution ===
+        FlashbotsBundleResolution.BlockPassedWithoutInclusion
+      ) {
+        console.log(`${blk + 2}: Block wasn't included. Let's keep going...`);
+      } else if (
+        bundleResolution === FlashbotsBundleResolution.AccountNonceTooHigh
+      ) {
+        console.log(`${blk + 2}: Account nonce too high :(`);
+        process.exit(1);
+      }
+    }
+  });
 }
 
 main().catch(console.error);

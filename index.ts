@@ -8,8 +8,6 @@ import {
 require("dotenv").config();
 
 async function main() {
-  console.log(process.env);
-
   let base = new ethers.providers.JsonRpcProvider(
     { url: process.env.POLYGON_RPC_URL! },
     137

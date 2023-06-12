@@ -39,6 +39,6 @@ This error happens when you send a bundle targeting a block that is not the next
 This error is the opposite of *header not found*. It happens when you send a bundle target a block that was already mined (e.g: sending a bundle for the block 10 when the current block is 10 and it arrives when the block 13 is being formed)
 
 ##### Bundle is never accepted
-Currently in polygon, the validators are choosen to validate 64 blocks in a row. This means that the validator 0x123 of the block `n` will be the same for the block `n + 63`. This fact, together with the one that Marlin's validator doesn't have lots of MATIC staked (last time it validated a block at the time of writing this was 3 days ago) make it hard to have a bundle accepted. 
+Currently in polygon, the validators are choosen to validate 64 blocks in a row. This means that the validator 0x123 of the block `n` will be the same for the block `n + 63`.
 
 A good approach would be to have a script that looks when a validator that integrates the bundle methods starts validating blocks, participating validators are [0x88c5e96c1459d224383dcb1fe0cedd1fcee25ffb](https://polygonscan.com/address/0x88c5e96c1459d224383dcb1fe0cedd1fcee25ffb) and [0x742d13f0b2a19c823bdd362b16305e4704b97a38](https://polygonscan.com/address/0x742d13f0b2a19c823bdd362b16305e4704b97a38) and then start sending bundles, due to the fact that the next 63 block will also be validated by it uwu
